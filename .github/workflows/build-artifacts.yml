@@ -34,16 +34,16 @@ jobs:
         run: npm install
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install
-      - name: Build debug APK
+      - name: Build standalone release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ChDevAgent-Android-debug
-          path: android-controller/android/app/build/outputs/apk/debug/app-debug.apk
+          name: ChDevAgent-Android-standalone
+          path: android-controller/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
   windows-agent:
