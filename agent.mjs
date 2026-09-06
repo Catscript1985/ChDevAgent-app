@@ -15,7 +15,6 @@ const tasks = new Map();
 const audit = [];
 const activeControllers = new Map();
 
-await fs.mkdir(WORKSPACE, { recursive: true });
 
 function now() { return new Date().toISOString(); }
 function id(prefix) { return `${prefix}_${crypto.randomBytes(6).toString("hex")}`; }
@@ -218,15 +217,23 @@ async function route(req, res) {
   return json(res, 404, { error: "not_found" });
 }
 
-const server = http.createServer((req, res) => {
-  route(req, res).catch((error) => {
-    record("gateway.error", { error: error instanceof Error ? error.message : "unknown" });
-    json(res, 500, { error: "internal_error", message: error instanceof Error ? error.message : "unknown" });
+async function start() {
+  await fs.mkdir(WORKSPACE, { recursive: true });
+  const server = http.createServer((req, res) => {
+    route(req, res).catch((error) => {
+      record("gateway.error", { error: error instanceof Error ? error.message : "unknown" });
+      json(res, 500, { error: "internal_error", message: error instanceof Error ? error.message : "unknown" });
+    });
   });
-});
-server.listen(PORT, HOST, () => {
-  console.log(`ChDevAgent local gateway listening at http://${HOST}:${PORT}`);
-  console.log(`Workspace: ${WORKSPACE}`);
-  console.log(`Pairing code: ${PAIRING_CODE}`);
-  console.log("This MVP exposes read-only workspace tools only.");
+  server.listen(PORT, HOST, () => {
+    console.log(`ChDevAgent local gateway listening at http://${HOST}:${PORT}`);
+    console.log(`Workspace: ${WORKSPACE}`);
+    console.log(`Pairing code: ${PAIRING_CODE}`);
+    console.log("This MVP exposes read-only workspace tools only.");
+  });
+}
+
+start().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
 });
