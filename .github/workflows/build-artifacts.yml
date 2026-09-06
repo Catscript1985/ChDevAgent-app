@@ -1,0 +1,87 @@
+name: Build ChDevAgent artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  android-apk:
+    name: Android debug APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-controller
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: android-controller/package.json
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install dependencies
+        run: npm install
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChDevAgent-Android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  windows-agent:
+    name: Windows 10 PC Agent package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install packaging tools
+        run: npm install --no-save esbuild @yao-pkg/pkg
+      - name: Bundle gateway
+        run: npx esbuild agent.mjs --bundle --platform=node --format=cjs --outfile=dist/agent.cjs
+      - name: Package Windows executable
+        run: npx pkg dist/agent.cjs --targets node20-win-x64 --output dist/ChDevAgent-Agent.exe
+      - name: Assemble Windows package
+        run: |
+          mkdir -p dist/ChDevAgent-Windows10/public dist/ChDevAgent-Windows10/workspace
+          cp dist/ChDevAgent-Agent.exe dist/ChDevAgent-Windows10/
+          cp public/index.html dist/ChDevAgent-Windows10/public/
+          cp README.md dist/ChDevAgent-Windows10/
+          cat > dist/ChDevAgent-Windows10/Start-ChDevAgent.bat <<'EOF'
+          @echo off
+          setlocal
+          set CHDEVAGENT_PORT=8228
+          set HOST=0.0.0.0
+          set CHDEVAGENT_WORKSPACE=%~dp0workspace
+          "%~dp0ChDevAgent-Agent.exe"
+          EOF
+          cd dist && zip -qr ChDevAgent-Windows10.zip ChDevAgent-Windows10
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChDevAgent-Windows10
+          path: dist/ChDevAgent-Windows10.zip
+          if-no-files-found: error

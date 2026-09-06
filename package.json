@@ -1,0 +1,10 @@
+{
+  "name": "chdevagent-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first ChDevAgent gateway with pairing, approval and scoped workspace tools.",
+  "scripts": {
+    "start": "node agent.mjs"
+  }
+}

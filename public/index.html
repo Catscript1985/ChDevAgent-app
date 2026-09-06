@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1117" />
+  <title>ChDevAgent / Local Console</title>
+  <style>
+    :root { --bg:#0b1117; --surface:#121e24; --surface-2:#18272d; --line:#30454b; --text:#e6f0ec; --muted:#8ba1a2; --lime:#c8f169; --amber:#efb25c; --coral:#ff8177; --blue:#7bbbea; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at 88% 0%, #182d28 0, transparent 28%), var(--bg); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    body:before { content:""; position:fixed; inset:0; opacity:.04; pointer-events:none; background-image:linear-gradient(rgba(200,241,105,.5) 1px, transparent 1px),linear-gradient(90deg,rgba(200,241,105,.5) 1px,transparent 1px); background-size:24px 24px; mask-image:linear-gradient(120deg,#000,transparent 70%); }
+    .wrap { width:min(100%,720px); margin:0 auto; padding:24px 18px 42px; position:relative; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:8px 0 28px; border-bottom:1px solid rgba(200,241,105,.16); }
+    .brand { display:flex; gap:10px; align-items:center; font-weight:700; letter-spacing:-.03em; }
+    .mark { width:25px; height:25px; border:2px solid var(--lime); border-right-color:transparent; border-radius:7px 3px 3px 7px; position:relative; }.mark:after{content:"";position:absolute;width:4px;height:4px;border-radius:50%;background:var(--lime);right:-6px;top:8px;box-shadow:0 0 10px var(--lime)}
+    .mark:before{content:"";position:absolute;width:8px;height:8px;border-left:2px solid var(--lime);border-bottom:2px solid var(--lime);transform:rotate(45deg);left:6px;top:6px}
+    .status { display:flex; align-items:center; gap:7px; color:var(--lime); font:10px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; }.dot{width:7px;height:7px;border-radius:50%;background:var(--lime);box-shadow:0 0 10px var(--lime)}
+    .eyebrow { color:var(--lime); font:10px ui-monospace,monospace; letter-spacing:.13em; text-transform:uppercase; margin-top:28px; }.eyebrow span{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--lime);margin-right:8px}
+    h1 { font-size:42px; line-height:.98; letter-spacing:-.07em; margin:16px 0 12px; } h1 em{font-style:normal;color:var(--lime)} h2{font-size:20px;letter-spacing:-.04em;margin:0}
+    p { color:var(--muted); margin:0; }.lede{max-width:470px}
+    .panel { margin-top:24px; border:1px solid var(--line); background:rgba(18,30,36,.88); box-shadow:0 20px 60px rgba(0,0,0,.2); }.panel-head{display:flex;align-items:center;justify-content:space-between;padding:15px 16px;border-bottom:1px solid var(--line)}.panel-head small{color:#738a8c;font:9px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}
+    .body{padding:16px}.hidden{display:none!important}
+    label{display:block;color:#a7b9b7;font:10px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px} input{width:100%;background:#0e191f;border:1px solid #3d565b;color:var(--text);padding:13px 12px;outline:none;font:13px ui-monospace,monospace}input:focus{border-color:var(--lime);box-shadow:0 0 0 3px rgba(200,241,105,.08)}
+    .row{display:flex;gap:10px}.row>*{flex:1}.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 14px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--text);font:600 10px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.04em}.button.primary{background:var(--lime);color:#132017;border-color:var(--lime)}.button.danger{color:var(--coral);border-color:#70413f}.button:active{transform:scale(.98)}
+    .hint{font-size:12px;margin-top:10px}.error{color:var(--coral)}.success{color:var(--lime)}
+    .command{display:flex;gap:8px;align-items:center}.command input{flex:1}.command .button{padding:13px}
+    .task{border:1px solid var(--line);background:var(--surface-2);padding:16px;margin-top:16px}.task-top,.meta,.task-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.task-top small,.meta{font:10px ui-monospace,monospace;color:#7d9696;text-transform:uppercase;letter-spacing:.08em}.badge{color:var(--amber);font:10px ui-monospace,monospace}.badge.approved,.badge.succeeded{color:var(--lime)}.badge.rejected,.badge.failed,.badge.cancelled{color:var(--coral)}.task strong{display:block;margin:18px 0 8px;font-size:15px;font-weight:500}.meta{justify-content:flex-start;text-transform:none;letter-spacing:0;color:#91a6a2}.preview{margin-top:16px;padding:12px;border-left:2px solid var(--amber);background:#211e17;color:#c7cfbd;font-size:12px}.preview b{color:var(--amber);font:10px ui-monospace,monospace;display:block;margin-bottom:5px;text-transform:uppercase}.task-actions{justify-content:flex-start;margin-top:16px}.task-actions .button{flex:1}.empty{padding:25px 4px;color:#73898b;font:12px ui-monospace,monospace}
+    .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:16px}.stat{background:var(--surface);padding:13px}.stat small{display:block;color:#7f9695;font:9px ui-monospace,monospace;text-transform:uppercase}.stat b{display:block;color:var(--lime);font-size:22px;letter-spacing:-.06em;margin-top:6px}.footer{padding-top:35px;color:#63787b;font:10px ui-monospace,monospace;display:flex;justify-content:space-between;gap:10px;border-top:1px solid #23363b;margin-top:38px}
+    @media(min-width:620px){.wrap{padding:36px 28px 52px}h1{font-size:60px}.panel{margin-top:34px}.body{padding:22px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header><div class="brand"><span class="mark"></span><span>ChDevAgent<span style="color:var(--lime)">.</span></span></div><div class="status"><span class="dot"></span><span id="connectionStatus">offline</span></div></header>
+    <div class="eyebrow"><span></span> MOBILE CONTROLLER / LOCAL LAN</div>
+    <h1>Your phone.<br><em>Your command.</em></h1>
+    <p class="lede">Pair once with the PC agent, then review every local action before it runs.</p>
+
+    <section class="panel" id="pairPanel"><div class="panel-head"><h2>Pair this device</h2><small>01 / identity</small></div><div class="body"><label for="pairCode">Pairing code from your PC</label><div class="row"><input id="pairCode" inputmode="numeric" maxlength="6" placeholder="123456" /><input id="deviceName" placeholder="Device name" value="My phone" /></div><button class="button primary" style="width:100%;margin-top:12px" id="pairButton">Connect to local agent</button><p id="pairMessage" class="hint">The code is printed in the PC agent terminal. Nothing leaves your network.</p></div></section>
+
+    <section class="panel hidden" id="controlPanel"><div class="panel-head"><h2>Command center</h2><small id="workspaceLabel">local workspace</small></div><div class="body"><div class="command"><input id="instruction" placeholder="Tell the agent what to do..." /><button class="button primary" id="sendButton">Send</button></div><div class="stat-grid"><div class="stat"><small>Agent</small><b>READY</b></div><div class="stat"><small>Scope</small><b>READ</b></div><div class="stat"><small>Network</small><b>LAN</b></div></div><div id="taskList"><div class="empty">No tasks yet. Start with a read-only workspace request.</div></div></div></section>
+    <footer><span>LOCAL / PRIVATE / OPEN</span><span>ChDevAgent MVP</span></footer>
+  </div>
+<script>
+  const tokenKey='chdevagent_token';
+  let token=localStorage.getItem(tokenKey);
+  const $=id=>document.getElementById(id);
+  const api=async(path,opts={})=>{const headers={'content-type':'application/json',...(opts.headers||{})};if(token)headers.authorization='Bearer '+token;const r=await fetch(path,{...opts,headers});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data};
+  const setStatus=(text,ok=false)=>{$('connectionStatus').textContent=text;$('connectionStatus').style.color=ok?'var(--lime)':'var(--amber)'};
+  const escapeHtml=s=>String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  function renderTasks(tasks){if(!tasks.length){$('taskList').innerHTML='<div class="empty">No tasks yet. Start with a read-only workspace request.</div>';return} $('taskList').innerHTML=tasks.map(t=>{const preview=t.preview||{};const badge=t.status.replaceAll('_',' ');let buttons='';if(t.status==='awaiting_approval')buttons='<div class="task-actions"><button class="button primary" onclick="act(\''+t.id+'\',\'approve\')">Approve</button><button class="button danger" onclick="act(\''+t.id+'\',\'reject\')">Reject</button></div>';if(['approved','executing'].includes(t.status))buttons='<div class="task-actions"><button class="button danger" onclick="act(\''+t.id+'\',\'cancel\')">Stop task</button></div>';const result=t.result?.content?'<div class="preview"><b>Result</b>'+escapeHtml(t.result.content).replaceAll('\n','<br>')+'</div>':'';return '<article class="task"><div class="task-top"><small>'+escapeHtml(t.id)+'</small><span class="badge '+escapeHtml(t.status)+'">'+escapeHtml(badge)+'</span></div><strong>'+escapeHtml(t.instruction)+'</strong><div class="meta">scope: '+escapeHtml(preview.scope||'/workspace')+' · '+escapeHtml(preview.permission||'read-only')+'</div><div class="preview"><b>Before anything runs</b>'+escapeHtml(preview.action||'Local action preview')+'<br>'+escapeHtml(preview.impact||'Scoped to local workspace')+'</div>'+result+buttons+'</article>'}).join('')}
+  window.act=async(id,action)=>{try{await api('/api/tasks/'+id+'/'+action,{method:'POST',body:'{}'});await refresh()}catch(e){alert(e.message)}};
+  async function refresh(){if(!token)return;try{const data=await api('/api/tasks');renderTasks(data.tasks);setStatus('online',true)}catch(e){setStatus('offline')}}
+  async function pair(){const code=$('pairCode').value.trim();try{const data=await api('/api/pairing/confirm',{method:'POST',body:JSON.stringify({code,deviceName:$('deviceName').value.trim()||'Paired phone'})});token=data.token;localStorage.setItem(tokenKey,token);$('pairPanel').classList.add('hidden');$('controlPanel').classList.remove('hidden');$('workspaceLabel').textContent=data.device.name+' / paired';setStatus('online',true);refresh()}catch(e){$('pairMessage').textContent='Could not pair: '+e.message;$('pairMessage').className='hint error'}}
+  async function send(){const input=$('instruction');const instruction=input.value.trim();if(!instruction)return;try{await api('/api/tasks',{method:'POST',body:JSON.stringify({instruction,requestedTools:['file.list'],relativePath:'.'})});input.value='';await refresh()}catch(e){alert(e.message)}}
+  $('pairButton').onclick=pair;$('sendButton').onclick=send;$('instruction').onkeydown=e=>{if(e.key==='Enter')send()};
+  if(token){$('pairPanel').classList.add('hidden');$('controlPanel').classList.remove('hidden');refresh();setInterval(refresh,1800)}
+</script>
+</body>
+</html>

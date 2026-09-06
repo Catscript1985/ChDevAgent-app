@@ -1,0 +1,31 @@
+# ChDevAgent Controller — Android
+
+Đây là mobile controller Expo cho ChDevAgent. Ứng dụng kết nối trực tiếp tới PC Agent qua địa chỉ IP LAN, không cần tài khoản cloud và không dùng API AI bên thứ ba.
+
+## Chạy thử bằng Expo
+
+Cài Node.js 20+ rồi chạy trong thư mục này:
+
+```bash
+npm install
+npx expo start
+```
+
+Có thể mở bằng Expo Go để thử giao diện. Trên ứng dụng, nhập địa chỉ PC, ví dụ `http://192.168.1.24:8228`, sau đó nhập pairing code được in bởi PC Agent.
+
+## Build APK debug
+
+Để tạo APK cài thử nội bộ, máy build cần Android SDK/JDK hoặc dùng dịch vụ build Expo/EAS. Luồng dự kiến:
+
+```bash
+npx expo install
+npx eas login
+npx eas build:configure
+npx eas build --platform android --profile preview
+```
+
+Bản preview tạo APK để cài thủ công trên Android. Bản release cần cấu hình signing key riêng; không nên dùng debug key cho phân phối chính thức.
+
+## Giới hạn hiện tại
+
+Màn hình đã hỗ trợ pairing, tạo task read-only, xem preview, approve/reject và theo dõi trạng thái. Đây chưa phải bản release store: chưa có QR scanner, push notification, secure token persistence, audit screen riêng hoặc certificate pinning.

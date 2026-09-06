@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "ChDevAgent Controller",
+    "slug": "chdevagent-controller",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.chdevagent.controller",
+      "versionCode": 1,
+      "permissions": []
+    }
+  }
+}
