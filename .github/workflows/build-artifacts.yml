@@ -3,15 +3,15 @@ name: Build ChDevAgent artifacts
 on:
   workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   android-apk:
-    name: Android debug APK
+    name: Android standalone release APK
     runs-on: ubuntu-latest
     defaults:
       run:
