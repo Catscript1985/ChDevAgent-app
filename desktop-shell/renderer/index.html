@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:8228; img-src 'self' data:; style-src 'self'; script-src 'self';" />
+  <title>ChDevAgent — Desktop</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="onboarding" class="onboarding hidden">
+    <div class="onboarding-card">
+      <div class="brand-lockup"><img src="logo.png" alt="ChDevAgent" /><div><span class="eyebrow">LOCAL-FIRST AI</span><strong>ChDevAgent<span>.</span></strong></div></div>
+      <div class="step-label">BƯỚC 01 / LƯU TRỮ</div>
+      <h1>Chọn nơi Agent lưu dữ liệu.</h1>
+      <p class="lead">Chọn một thư mục riêng để lưu workspace, lịch sử trò chuyện, nhật ký audit và cấu hình quyền. Bạn có thể đổi vị trí bất cứ lúc nào trong Cài đặt.</p>
+      <div class="storage-preview"><span class="storage-icon">▣</span><div><b id="onboarding-path">Chưa chọn thư mục</b><small>Dữ liệu sẽ nằm trong thư mục này</small></div></div>
+      <div class="onboarding-actions"><button class="button secondary" id="choose-root">Chọn thư mục</button><button class="button primary" id="continue-onboarding" disabled>Tiếp tục</button></div>
+      <p class="fineprint">ChDevAgent không tự cấp quyền quản trị toàn máy. Mỗi capability sẽ yêu cầu quyền riêng, có giải thích và ghi nhật ký.</p>
+    </div>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand-lockup brand-small"><img src="logo.png" alt="ChDevAgent" /><div><strong>ChDevAgent<span>.</span></strong><small>DESKTOP AGENT</small></div></div>
+      <div class="connection-card"><span class="status-dot"></span><div><b id="connection-label">Đang khởi động</b><small id="connection-detail">Agent nội bộ</small></div><button id="refresh-status" title="Làm mới">↻</button></div>
+      <nav class="nav"><button class="nav-item active" data-view="chat"><span>✦</span>Trợ lý trò chuyện</button><button class="nav-item" data-view="agent"><span>⌁</span>Agent thực thi</button><button class="nav-item" data-view="files"><span>▤</span>Tệp cục bộ</button><button class="nav-item" data-view="tasks"><span>◷</span>Nhiệm vụ</button><button class="nav-item" data-view="permissions"><span>◈</span>Quyền truy cập</button></nav>
+      <div class="sidebar-bottom"><button class="nav-item" data-view="settings"><span>⚙</span>Cài đặt</button><div class="workspace-chip"><small>WORKSPACE</small><b id="workspace-path">Đang tải…</b><button id="open-data">Mở thư mục</button></div></div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar"><div><span class="eyebrow" id="view-eyebrow">TRỢ LÝ / TRÒ CHUYỆN</span><h2 id="view-title">Trò chuyện với ChDevAgent</h2></div><div class="top-actions"><span class="local-badge">● CỤC BỘ</span><button class="icon-button" id="emergency-stop" title="Dừng tất cả tác vụ">■</button></div></header>
+      <section id="view-chat" class="view active"><div class="hero-strip"><div><span class="eyebrow">BỘ NÃO + BÀN TAY</span><h3>Hỏi trước. Hiểu rõ. <em>Rồi mới chạy.</em></h3><p>Trao đổi với trợ lý ở đây. Khi cần thao tác trên máy, chuyển sang Agent để xem kế hoạch và phê duyệt.</p></div><div class="signal-orbit"><span></span><b>LOCAL<br/>SIGNAL</b></div></div><div id="chat-messages" class="chat-messages"><div class="empty-chat"><span>✦</span><h4>Bắt đầu từ một câu hỏi</h4><p>Ví dụ: “Workspace của tôi đang lưu ở đâu?” hoặc “Giải thích quyền đọc tệp.”</p></div></div><div class="composer"><button id="tool-menu" class="composer-add">＋</button><textarea id="chat-input" placeholder="Viết bằng tiếng Việt…"></textarea><button id="send-chat" class="send-button">Gửi <span>↗</span></button></div><div id="tool-popover" class="tool-popover hidden"><button data-tool="files"><b>Tệp cục bộ</b><small>Xem trong workspace</small></button><button data-tool="tasks"><b>Nhiệm vụ gần đây</b><small>Xem lịch sử Agent</small></button><button data-tool="permissions"><b>Quyền truy cập</b><small>Kiểm tra capability</small></button><button data-tool="disabled"><b>Chụp màn hình</b><small>Chưa bật</small></button></div></section>
+      <section id="view-agent" class="view"><div class="section-intro"><span class="eyebrow">AGENT / THỰC THI</span><h3>Biến ý định thành một kế hoạch có kiểm soát.</h3><p>Mỗi task đều có phạm vi, quyền và preview trước khi chạy.</p></div><div class="agent-grid"><div class="task-compose panel"><div class="panel-heading"><b>Tạo nhiệm vụ</b><span>01 / Ý ĐỊNH</span></div><label>Bạn muốn PC làm gì?</label><small>Viết rõ kết quả mong muốn. Agent sẽ giải thích các bước trước khi xin quyền.</small><textarea id="task-input" placeholder="Ví dụ: Liệt kê các tệp trong workspace"></textarea><button id="create-task" class="button primary">Tạo preview nhiệm vụ</button></div><div class="live-panel panel"><div class="panel-heading"><b>Trạng thái realtime</b><span id="live-percent">0%</span></div><div class="progress-track"><i id="live-progress"></i></div><b id="live-step">Chờ yêu cầu</b><p id="live-summary">PC Agent sẵn sàng.</p><button id="stop-task" class="button danger">Dừng tác vụ</button></div></div><div id="agent-tasks" class="task-list"></div></section>
+      <section id="view-files" class="view"><div class="section-intro"><span class="eyebrow">WORKSPACE / TỆP</span><h3>Dữ liệu trong vùng được cấp phép.</h3><p>Chỉ tệp bên trong workspace đã chọn mới được hiển thị.</p></div><div id="file-list" class="file-list panel"><div class="loading">Đang tải danh sách tệp…</div></div></section>
+      <section id="view-tasks" class="view"><div class="section-intro"><span class="eyebrow">HISTORY / AUDIT</span><h3>Lịch sử nhiệm vụ và sự kiện.</h3><p>Mọi hành động quan trọng đều có dấu vết để bạn kiểm tra.</p></div><div id="history-list" class="history-list"></div></section>
+      <section id="view-permissions" class="view"><div class="section-intro"><span class="eyebrow">CONTROL / CAPABILITIES</span><h3>Quyền của Agent, do bạn quyết định.</h3><p>Không có quyền ngầm. Capability bị tắt sẽ không được gọi.</p></div><div id="permission-list" class="permission-list"></div></section>
+      <section id="view-settings" class="view"><div class="section-intro"><span class="eyebrow">SYSTEM / SETTINGS</span><h3>Cài đặt dữ liệu và kết nối.</h3><p>Thay đổi vùng lưu dữ liệu hoặc mở thư mục ChDevAgent.</p></div><div class="settings-grid panel"><div><label>Thư mục dữ liệu</label><p id="settings-root">Đang tải…</p><button id="change-root" class="button secondary">Đổi thư mục lưu</button></div><div><label>Giao thức</label><p>PC Agent chạy nội bộ trong desktop shell. Điện thoại kết nối qua LAN khi bạn bật pairing.</p></div></div></section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

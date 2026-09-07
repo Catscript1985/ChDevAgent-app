@@ -83,3 +83,34 @@ jobs:
           name: ChDevAgent-Windows10
           path: dist/ChDevAgent-Windows10.zip
           if-no-files-found: error
+
+  desktop-exe:
+    name: ChDevAgent standalone desktop EXE
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop-shell
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Stage PC Agent files
+        shell: pwsh
+        run: |
+          Copy-Item ..\\agent.mjs .\\agent.mjs -Force
+          Copy-Item ..\\public .\\public -Recurse -Force
+      - name: Install desktop dependencies
+        run: npm install
+      - name: Build Windows standalone app
+        run: npm run dist -- --publish never
+      - name: Upload standalone EXE artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChDevAgent-Desktop-Windows
+          path: |
+            desktop-shell/release/*.exe
+            desktop-shell/release/*.blockmap
+          if-no-files-found: error

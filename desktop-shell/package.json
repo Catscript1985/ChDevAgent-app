@@ -1,0 +1,28 @@
+{
+  "name": "chdevagent-desktop",
+  "version": "0.4.0",
+  "private": true,
+  "description": "ChDevAgent Windows standalone desktop app",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.0"
+  },
+  "devDependencies": {
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.chdevagent.desktop",
+    "productName": "ChDevAgent",
+    "directories": { "output": "release" },
+    "files": ["main.cjs", "preload.cjs", "renderer/**/*", "agent.mjs", "public/**/*", "package.json"],
+    "extraMetadata": { "main": "main.cjs" },
+    "win": { "target": ["nsis", "portable"], "artifactName": "ChDevAgent-${version}-${arch}.${ext}" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true },
+    "portable": { "artifactName": "ChDevAgent-${version}-portable.${ext}" }
+  }
+}
