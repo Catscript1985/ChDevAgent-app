@@ -7,7 +7,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   android-apk:
@@ -114,3 +114,33 @@ jobs:
             desktop-shell/release/*.exe
             desktop-shell/release/*.blockmap
           if-no-files-found: error
+
+  release:
+    name: Public release links
+    needs: [android-apk, desktop-exe]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ChDevAgent-Android-standalone
+          path: release-assets/android
+      - name: Download desktop artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ChDevAgent-Desktop-Windows
+          path: release-assets/desktop
+      - name: Publish public release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.4.0-standalone
+          name: ChDevAgent v0.4.0 — Windows standalone GUI
+          prerelease: true
+          make_latest: false
+          body: |
+            Bản desktop standalone HTML/CSS theo logo ChDevAgent. App mở thành cửa sổ riêng, có onboarding chọn thư mục lưu dữ liệu, Chatbot, Agent, Tệp, Nhiệm vụ, Quyền và Cài đặt. PC Agent vẫn deny-by-default và yêu cầu phê duyệt capability.
+          files: |
+            release-assets/android/app-release.apk
+            release-assets/desktop/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
