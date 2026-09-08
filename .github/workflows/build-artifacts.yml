@@ -71,8 +71,8 @@ jobs:
           cat > dist/ChDevAgent-Windows10/Start-ChDevAgent.bat <<'EOF'
           @echo off
           setlocal
-          set CHDEVAGENT_PORT=8228
           set HOST=0.0.0.0
+          set CHDEVAGENT_PORT=8228
           set CHDEVAGENT_WORKSPACE=%~dp0workspace
           "%~dp0ChDevAgent-Agent.exe"
           EOF
@@ -133,12 +133,12 @@ jobs:
       - name: Publish public release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.4.0-standalone
-          name: ChDevAgent v0.4.0 — Windows standalone GUI
+          tag_name: v0.5.0-lan-agent
+          name: ChDevAgent v0.5.0 — LAN Background Agent
           prerelease: true
           make_latest: false
           body: |
-            Bản desktop standalone HTML/CSS theo logo ChDevAgent. App mở thành cửa sổ riêng, có onboarding chọn thư mục lưu dữ liệu, Chatbot, Agent, Tệp, Nhiệm vụ, Quyền và Cài đặt. PC Agent vẫn deny-by-default và yêu cầu phê duyệt capability.
+            Bản ChDevAgent v0.5.0 gồm desktop standalone HTML/CSS theo logo, PC Agent chạy nền trong khay hệ thống, mã thiết bị cố định, địa chỉ IPv4 LAN, ghép nối Android trong cùng mạng và giao diện Chatbot/Agent tiếng Việt. PC Agent vẫn deny-by-default, yêu cầu phê duyệt capability và có nút dừng.
           files: |
             release-assets/android/app-release.apk
             release-assets/desktop/*.exe

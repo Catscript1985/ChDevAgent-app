@@ -4,12 +4,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
-const VERSION = "0.2.0";
+const VERSION = "0.5.0";
 const PORT = Number(process.env.CHDEVAGENT_PORT || process.env.PORT || 8228);
 const HOST = process.env.HOST || "127.0.0.1";
 const WORKSPACE = path.resolve(process.env.CHDEVAGENT_WORKSPACE || path.join(process.cwd(), "workspace"));
 const DATA_FILE = path.join(WORKSPACE, ".chdevagent-state.json");
-const PAIRING_CODE = String(process.env.CHDEVAGENT_PAIRING_CODE || Math.floor(100000 + Math.random() * 900000));
+let PAIRING_CODE = String(process.env.CHDEVAGENT_PAIRING_CODE || '');
+let DEVICE_ID = String(process.env.CHDEVAGENT_DEVICE_ID || '');
+const IDENTITY_FILE = path.join(WORKSPACE, '.chdevagent-device.json');
 const MAX_BODY = 32 * 1024;
 
 const devices = new Map();
@@ -28,9 +30,12 @@ let activity = { state: "idle", currentStep: "Chờ yêu cầu", progress: 0, su
 
 function now() { return new Date().toISOString(); }
 function id(prefix) { return `${prefix}_${crypto.randomBytes(6).toString("hex")}`; }
+function lanAddresses() { return Object.values(os.networkInterfaces()).flatMap(items => (items || []).filter(item => item.family === 'IPv4' && !item.internal).map(item => item.address)); }
 function json(res, status, payload) { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET,POST,OPTIONS" }); res.end(JSON.stringify(payload)); }
 function tokenHash(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
 function getToken(req) { return String(req.headers.authorization || "").replace(/^Bearer\s+/i, ""); }
+function isLoopback(req) { return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress); }
+function isLocalUi(req) { return req.headers['x-chdevagent-local-ui'] === '1' && isLoopback(req); }
 function getDevice(req) { const token = getToken(req); const device = token ? devices.get(tokenHash(token)) : null; return device && !device.revoked ? device : null; }
 function safePath(relative = ".") { const candidate = path.resolve(WORKSPACE, relative); if (candidate !== WORKSPACE && !candidate.startsWith(`${WORKSPACE}${path.sep}`)) throw new Error("Đường dẫn nằm ngoài workspace được cấp phép"); return candidate; }
 async function readBody(req) { let body = ""; for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new Error("Nội dung yêu cầu quá lớn"); } return body ? JSON.parse(body) : {}; }
@@ -44,10 +49,11 @@ function persistState() {
   });
   return persistQueue;
 }
+async function loadIdentity() { try { const identity = JSON.parse(await fs.readFile(IDENTITY_FILE, 'utf8')); PAIRING_CODE = String(identity.pairingCode || ''); DEVICE_ID = String(identity.deviceId || ''); } catch {} if (!/^\d{6}$/.test(PAIRING_CODE)) PAIRING_CODE = String(Math.floor(100000 + Math.random() * 900000)); if (!DEVICE_ID) DEVICE_ID = `pc_${crypto.randomBytes(6).toString('hex')}`; await fs.writeFile(IDENTITY_FILE, JSON.stringify({ deviceId: DEVICE_ID, pairingCode: PAIRING_CODE, createdAt: now() }, null, 2), 'utf8'); }
 async function restoreState() { try { const saved = JSON.parse(await fs.readFile(DATA_FILE, "utf8")); for (const device of saved.devices || []) devices.set(device.tokenHash, device); for (const task of saved.tasks || []) tasks.set(task.id, task); audit.push(...(saved.audit || []).slice(0, 300)); if (saved.activity) activity = saved.activity; } catch { /* first run */ } }
 function record(type, data = {}) { const event = { id: id("evt"), at: now(), type, ...data }; audit.unshift(event); if (audit.length > 300) audit.length = 300; void persistState(); return event; }
 function setActivity(next, logLine) { activity = { ...activity, ...next, updatedAt: now() }; if (logLine) activity.log = [{ at: now(), text: logLine }, ...(activity.log || [])].slice(0, 30); void persistState(); }
-function requireDevice(req, res) { const device = getDevice(req); if (!device) { json(res, 401, { error: "paired_device_required", message: "Thiết bị chưa được ghép nối" }); return null; } device.lastSeenAt = now(); return device; }
+function requireDevice(req, res) { const device = getDevice(req); if (device) { device.lastSeenAt = now(); return device; } if (isLocalUi(req)) return { id: 'desktop-local', name: 'Desktop UI', pcDeviceId: DEVICE_ID, local: true }; json(res, 401, { error: "paired_device_required", message: "Thiết bị chưa được ghép nối" }); return null; }
 function taskSummary(task) { return { id: task.id, createdAt: task.createdAt, updatedAt: task.updatedAt, status: task.status, instruction: task.instruction, source: task.source, requestedTools: task.requestedTools, preview: task.preview, result: task.result || null, error: task.error || null }; }
 function activitySummary() { return { ...activity, activeTaskIds: [...activeControllers.keys()] }; }
 async function listWorkspace(relative = ".") { const target = safePath(relative); const entries = await fs.readdir(target, { withFileTypes: true }); return entries.sort((a, b) => a.name.localeCompare(b.name)).map(entry => ({ name: entry.name, type: entry.isDirectory() ? "directory" : "file" })); }
@@ -86,9 +92,9 @@ async function route(req, res) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`); const method = req.method || "GET";
   if (method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET,POST,OPTIONS" }); return res.end(); }
   if (method === "GET" && url.pathname === "/") { const html = await fs.readFile(path.join(process.cwd(), "public", "index.html"), "utf8"); res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }); return res.end(html); }
-  if (method === "GET" && url.pathname === "/api/health") return json(res, 200, { ok: true, service: "chdevagent-agent", version: VERSION, host: os.hostname(), workspace: WORKSPACE, pairedDevices: [...devices.values()].filter(d => !d.revoked).length, activity: activitySummary() });
-  if (method === "GET" && url.pathname === "/api/pairing/status") return json(res, 200, { pairingRequired: true, codeHint: `${PAIRING_CODE.slice(0, 2)}••••`, workspace: WORKSPACE });
-  if (method === "POST" && url.pathname === "/api/pairing/confirm") { const body = await readBody(req); if (String(body.code || "") !== PAIRING_CODE) return json(res, 403, { error: "invalid_pairing_code", message: "Mã ghép nối không đúng" }); const rawToken = crypto.randomBytes(24).toString("base64url"); const device = { id: id("device"), name: String(body.deviceName || "Điện thoại đã ghép nối"), tokenHash: tokenHash(rawToken), pairedAt: now(), lastSeenAt: now(), revoked: false }; devices.set(device.tokenHash, device); record("device.paired", { deviceId: device.id, name: device.name }); return json(res, 201, { device: { id: device.id, name: device.name, pairedAt: device.pairedAt }, token: rawToken }); }
+  if (method === "GET" && url.pathname === "/api/health") return json(res, 200, { ok: true, service: "chdevagent-agent", version: VERSION, host: os.hostname(), lanAddresses: lanAddresses(), workspace: WORKSPACE, deviceId: DEVICE_ID, codeHint: `${PAIRING_CODE.slice(0, 2)}••••`, pairedDevices: [...devices.values()].filter(d => !d.revoked).length, activity: activitySummary() });
+  if (method === "GET" && url.pathname === "/api/pairing/status") { const localUi = isLocalUi(req); return json(res, 200, { pairingRequired: true, deviceId: DEVICE_ID, codeHint: `${PAIRING_CODE.slice(0, 2)}••••`, ...(localUi ? { pairingCode: PAIRING_CODE } : {}), workspace: WORKSPACE }); }
+  if (method === "POST" && url.pathname === "/api/pairing/confirm") { const body = await readBody(req); if (String(body.code || "") !== PAIRING_CODE) return json(res, 403, { error: "invalid_pairing_code", message: "Mã ghép nối không đúng" }); const rawToken = crypto.randomBytes(24).toString("base64url"); const device = { id: id("device"), name: String(body.deviceName || "Điện thoại đã ghép nối"), tokenHash: tokenHash(rawToken), pairedAt: now(), lastSeenAt: now(), revoked: false, pcDeviceId: DEVICE_ID }; devices.set(device.tokenHash, device); record("device.paired", { deviceId: device.id, name: device.name }); return json(res, 201, { device: { id: device.id, name: device.name, pairedAt: device.pairedAt }, token: rawToken }); }
   const requiresDevice = ["/api/status", "/api/capabilities", "/api/tools", "/api/plan", "/api/recent-files", "/api/devices", "/api/audit", "/api/history", "/api/tasks", "/api/stop"].some(prefix => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`));
   const device = requiresDevice ? requireDevice(req, res) : null;
   if (requiresDevice && !device) return;
@@ -106,5 +112,5 @@ async function route(req, res) {
   return json(res, 404, { error: "not_found" });
 }
 
-async function start() { await fs.mkdir(WORKSPACE, { recursive: true }); await restoreState(); const server = http.createServer((req, res) => route(req, res).catch(error => { record("gateway.error", { error: error instanceof Error ? error.message : "unknown" }); json(res, 500, { error: "internal_error", message: error instanceof Error ? error.message : "unknown" }); })); server.listen(PORT, HOST, () => { console.log(`ChDevAgent local gateway v${VERSION} listening at http://${HOST}:${PORT}`); console.log(`Workspace: ${WORKSPACE}`); console.log(`Pairing code: ${PAIRING_CODE}`); console.log("Vietnamese UI + safe local capabilities enabled."); }); }
+async function start() { await fs.mkdir(WORKSPACE, { recursive: true }); await loadIdentity(); await restoreState(); const server = http.createServer((req, res) => route(req, res).catch(error => { record("gateway.error", { error: error instanceof Error ? error.message : "unknown" }); json(res, 500, { error: "internal_error", message: error instanceof Error ? error.message : "unknown" }); })); server.listen(PORT, HOST, () => { console.log(`ChDevAgent local gateway v${VERSION} listening at http://${HOST}:${PORT}`); console.log(`Workspace: ${WORKSPACE}`); console.log(`Pairing code: ${PAIRING_CODE}`); console.log(`LAN addresses: ${lanAddresses().join(', ') || 'Không phát hiện IPv4 LAN'}`); console.log("Vietnamese UI + safe local capabilities enabled."); }); }
 start().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, session } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, session, Tray, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -6,6 +6,8 @@ const { spawn } = require('child_process');
 let mainWindow;
 let agentProcess;
 let dataRoot;
+let tray;
+let allowQuit = false;
 
 function agentPath() {
   return app.isPackaged
@@ -17,7 +19,7 @@ function spawnAgent(workspace) {
   const env = {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
-    HOST: '127.0.0.1',
+    HOST: '0.0.0.0',
     CHDEVAGENT_PORT: '8228',
     CHDEVAGENT_WORKSPACE: workspace,
     CHDEVAGENT_DATA_ROOT: dataRoot,
@@ -44,6 +46,8 @@ async function chooseDataRoot() {
   fs.mkdirSync(path.join(root, 'logs'), { recursive: true });
   return root;
 }
+
+function createTray() { tray = new Tray(path.join(__dirname, 'renderer', 'logo.png')); tray.setToolTip('ChDevAgent — PC Agent đang chạy'); tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Mở giao diện', click: () => { mainWindow?.show(); mainWindow?.focus(); } }, { type: 'separator' }, { label: 'Dừng Agent', click: () => { if (agentProcess) agentProcess.kill(); mainWindow?.webContents.send('agent-exit', { code: 0, signal: 'tray-stop' }); } }, { label: 'Thoát ChDevAgent', click: () => { allowQuit = true; app.quit(); } }])); tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus(); }); }
 
 async function createWindow() {
   dataRoot = app.getPath('userData');
@@ -72,6 +76,7 @@ async function createWindow() {
     },
   });
   mainWindow.removeMenu();
+  mainWindow.on('close', (event) => { if (!allowQuit) { event.preventDefault(); mainWindow.hide(); } });
   await mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.webContents.send('desktop-config', { dataRoot, workspace: path.join(dataRoot, 'workspace') });
   spawnAgent(path.join(dataRoot, 'workspace'));
@@ -89,9 +94,10 @@ ipcMain.handle('choose-data-root', async () => {
 ipcMain.handle('open-data-root', () => shell.openPath(dataRoot));
 ipcMain.handle('get-desktop-config', () => ({ dataRoot, workspace: path.join(dataRoot, 'workspace') }));
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-  createWindow();
+  await createWindow();
+  createTray();
 });
-app.on('window-all-closed', () => { if (agentProcess) agentProcess.kill(); if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => { if (agentProcess) agentProcess.kill(); });
+app.on('window-all-closed', () => { if (allowQuit && agentProcess) agentProcess.kill(); if (process.platform !== 'darwin' && allowQuit) app.quit(); });
+app.on('before-quit', () => { allowQuit = true; if (agentProcess) agentProcess.kill(); if (tray) tray.destroy(); });
