@@ -2,12 +2,14 @@
   "expo": {
     "name": "ChDevAgent Controller",
     "slug": "chdevagent-controller",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/chdevagent-logo.png",
     "android": {
+      "adaptiveIcon": { "foregroundImage": "./assets/chdevagent-logo.png", "backgroundColor": "#071018" },
       "package": "com.chdevagent.controller",
-      "versionCode": 5,
+      "versionCode": 6,
       "permissions": []
     }
   }

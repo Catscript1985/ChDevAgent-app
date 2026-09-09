@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0"
 const PORT = Number(process.env.CHDEVAGENT_PORT || process.env.PORT || 8228);
 const HOST = process.env.HOST || "127.0.0.1";
 const WORKSPACE = path.resolve(process.env.CHDEVAGENT_WORKSPACE || path.join(process.cwd(), "workspace"));
@@ -16,6 +16,7 @@ const MAX_BODY = 32 * 1024;
 
 const devices = new Map();
 const tasks = new Map();
+const skills = new Map();
 const audit = [];
 const activeControllers = new Map();
 const capabilities = [
@@ -42,7 +43,7 @@ async function readBody(req) { let body = ""; for await (const chunk of req) { b
 let persistQueue = Promise.resolve();
 function persistState() {
   persistQueue = persistQueue.catch(() => {}).then(async () => {
-    const snapshot = { devices: [...devices.values()], tasks: [...tasks.values()], audit: audit.slice(0, 300), activity };
+    const snapshot = { devices: [...devices.values()], tasks: [...tasks.values()], skills: [...skills.values()], audit: audit.slice(0, 300), activity };
     const temp = `${DATA_FILE}.${process.pid}.tmp`;
     await fs.writeFile(temp, JSON.stringify(snapshot, null, 2), "utf8");
     await fs.rename(temp, DATA_FILE);
@@ -50,11 +51,13 @@ function persistState() {
   return persistQueue;
 }
 async function loadIdentity() { try { const identity = JSON.parse(await fs.readFile(IDENTITY_FILE, 'utf8')); PAIRING_CODE = String(identity.pairingCode || ''); DEVICE_ID = String(identity.deviceId || ''); } catch {} if (!/^\d{6}$/.test(PAIRING_CODE)) PAIRING_CODE = String(Math.floor(100000 + Math.random() * 900000)); if (!DEVICE_ID) DEVICE_ID = `pc_${crypto.randomBytes(6).toString('hex')}`; await fs.writeFile(IDENTITY_FILE, JSON.stringify({ deviceId: DEVICE_ID, pairingCode: PAIRING_CODE, createdAt: now() }, null, 2), 'utf8'); }
-async function restoreState() { try { const saved = JSON.parse(await fs.readFile(DATA_FILE, "utf8")); for (const device of saved.devices || []) devices.set(device.tokenHash, device); for (const task of saved.tasks || []) tasks.set(task.id, task); audit.push(...(saved.audit || []).slice(0, 300)); if (saved.activity) activity = saved.activity; } catch { /* first run */ } }
+async function restoreState() { try { const saved = JSON.parse(await fs.readFile(DATA_FILE, "utf8")); for (const device of saved.devices || []) devices.set(device.tokenHash, device); for (const task of saved.tasks || []) tasks.set(task.id, task); for (const skill of saved.skills || []) skills.set(skill.id, skill); audit.push(...(saved.audit || []).slice(0, 300)); if (saved.activity) activity = saved.activity; } catch { /* first run */ } }
 function record(type, data = {}) { const event = { id: id("evt"), at: now(), type, ...data }; audit.unshift(event); if (audit.length > 300) audit.length = 300; void persistState(); return event; }
 function setActivity(next, logLine) { activity = { ...activity, ...next, updatedAt: now() }; if (logLine) activity.log = [{ at: now(), text: logLine }, ...(activity.log || [])].slice(0, 30); void persistState(); }
 function requireDevice(req, res) { const device = getDevice(req); if (device) { device.lastSeenAt = now(); return device; } if (isLocalUi(req)) return { id: 'desktop-local', name: 'Desktop UI', pcDeviceId: DEVICE_ID, local: true }; json(res, 401, { error: "paired_device_required", message: "Thiết bị chưa được ghép nối" }); return null; }
 function taskSummary(task) { return { id: task.id, createdAt: task.createdAt, updatedAt: task.updatedAt, status: task.status, instruction: task.instruction, source: task.source, requestedTools: task.requestedTools, preview: task.preview, result: task.result || null, error: task.error || null }; }
+function skillSummary(skill) { return { id: skill.id, name: skill.name, description: skill.description, instructions: skill.instructions, source: skill.source, requestedCapabilities: skill.requestedCapabilities, status: skill.status, createdAt: skill.createdAt, updatedAt: skill.updatedAt, approvedAt: skill.approvedAt || null, history: skill.history || [] }; }
+function createSkill(body, device) { const name = String(body.name || '').trim(); const description = String(body.description || '').trim(); const instructions = String(body.instructions || '').trim(); if (!name || !instructions) throw new Error('Cần nhập tên và hướng dẫn cho skill'); const requestedCapabilities = Array.isArray(body.requestedCapabilities) ? body.requestedCapabilities.map(String).slice(0, 12) : []; const skill = { id: id('skill'), name, description, instructions, source: String(body.source || 'Người dùng tạo'), requestedCapabilities, status: 'draft', createdAt: now(), updatedAt: now(), ownerDeviceId: device.id, history: [{ at: now(), action: 'created', detail: 'Tạo bản nháp; chưa được Agent sử dụng' }] }; skills.set(skill.id, skill); record('skill.created', { skillId: skill.id, deviceId: device.id, requestedCapabilities }); void persistState(); return skill; }
 function activitySummary() { return { ...activity, activeTaskIds: [...activeControllers.keys()] }; }
 async function listWorkspace(relative = ".") { const target = safePath(relative); const entries = await fs.readdir(target, { withFileTypes: true }); return entries.sort((a, b) => a.name.localeCompare(b.name)).map(entry => ({ name: entry.name, type: entry.isDirectory() ? "directory" : "file" })); }
 async function readWorkspaceFile(relative) { const target = safePath(relative); const stat = await fs.stat(target); if (!stat.isFile()) throw new Error("Chỉ đọc được tệp, không đọc thư mục"); if (stat.size > 1024 * 1024) throw new Error("Tệp lớn hơn giới hạn 1 MB"); return fs.readFile(target, "utf8"); }
@@ -95,11 +98,14 @@ async function route(req, res) {
   if (method === "GET" && url.pathname === "/api/health") return json(res, 200, { ok: true, service: "chdevagent-agent", version: VERSION, host: os.hostname(), lanAddresses: lanAddresses(), workspace: WORKSPACE, deviceId: DEVICE_ID, codeHint: `${PAIRING_CODE.slice(0, 2)}••••`, pairedDevices: [...devices.values()].filter(d => !d.revoked).length, activity: activitySummary() });
   if (method === "GET" && url.pathname === "/api/pairing/status") { const localUi = isLocalUi(req); return json(res, 200, { pairingRequired: true, deviceId: DEVICE_ID, codeHint: `${PAIRING_CODE.slice(0, 2)}••••`, ...(localUi ? { pairingCode: PAIRING_CODE } : {}), workspace: WORKSPACE }); }
   if (method === "POST" && url.pathname === "/api/pairing/confirm") { const body = await readBody(req); if (String(body.code || "") !== PAIRING_CODE) return json(res, 403, { error: "invalid_pairing_code", message: "Mã ghép nối không đúng" }); const rawToken = crypto.randomBytes(24).toString("base64url"); const device = { id: id("device"), name: String(body.deviceName || "Điện thoại đã ghép nối"), tokenHash: tokenHash(rawToken), pairedAt: now(), lastSeenAt: now(), revoked: false, pcDeviceId: DEVICE_ID }; devices.set(device.tokenHash, device); record("device.paired", { deviceId: device.id, name: device.name }); return json(res, 201, { device: { id: device.id, name: device.name, pairedAt: device.pairedAt }, token: rawToken }); }
-  const requiresDevice = ["/api/status", "/api/capabilities", "/api/tools", "/api/plan", "/api/recent-files", "/api/devices", "/api/audit", "/api/history", "/api/tasks", "/api/stop"].some(prefix => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`));
+  const requiresDevice = ["/api/status", "/api/capabilities", "/api/tools", "/api/plan", "/api/recent-files", "/api/devices", "/api/audit", "/api/history", "/api/tasks", "/api/stop", "/api/skills"].some(prefix => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`));
   const device = requiresDevice ? requireDevice(req, res) : null;
   if (requiresDevice && !device) return;
   if (["/api/status", "/api/capabilities", "/api/tools"].includes(url.pathname)) return json(res, 200, url.pathname === "/api/status" ? { activity: activitySummary() } : { capabilities });
   if (method === "GET" && url.pathname === "/api/plan") { const current = activity.activeTaskId ? tasks.get(activity.activeTaskId) : null; return json(res, 200, { plan: current?.plan || [], taskId: current?.id || null }); }
+  if (method === "GET" && url.pathname === "/api/skills") return json(res, 200, { skills: [...skills.values()].filter(skill => skill.ownerDeviceId === device.id || device.local).map(skillSummary) });
+  if (method === "POST" && url.pathname === "/api/skills") { try { const skill = createSkill(await readBody(req), device); return json(res, 201, skillSummary(skill)); } catch (error) { return json(res, 400, { error: error instanceof Error ? error.message : 'invalid_skill' }); } }
+  const skillMatch = url.pathname.match(/^\/api\/skills\/([^/]+)\/(submit|approve|disable)$/); if (skillMatch && method === 'POST') { const skill = skills.get(skillMatch[1]); if (!skill || (skill.ownerDeviceId !== device.id && !device.local)) return json(res, 404, { error: 'skill_not_found' }); const action = skillMatch[2]; if (action === 'submit') skill.status = 'pending_review'; if (action === 'approve') { skill.status = 'enabled'; skill.approvedAt = now(); } if (action === 'disable') skill.status = 'disabled'; skill.updatedAt = now(); skill.history = [{ at: now(), action, detail: action === 'approve' ? 'Đã duyệt; chỉ có thể dùng trong capability đã cấp' : `Skill chuyển sang ${skill.status}` }, ...(skill.history || [])].slice(0, 30); record(`skill.${action}`, { skillId: skill.id, deviceId: device.id }); void persistState(); return json(res, 200, skillSummary(skill)); }
   if (method === "GET" && url.pathname === "/api/recent-files") return json(res, 200, { files: await recentFiles() });
   if (method === "GET" && url.pathname === "/api/devices") return json(res, 200, { devices: [...devices.values()].filter(d => !d.revoked).map(({ tokenHash: _, ...safe }) => safe) });
   if (method === "GET" && url.pathname === "/api/history") return json(res, 200, { tasks: [...tasks.values()].filter(t => t.deviceId === device.id).map(taskSummary), events: audit.filter(event => !event.deviceId || event.deviceId === device.id).slice(0, 100) });
