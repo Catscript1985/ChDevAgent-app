@@ -118,5 +118,54 @@ async function route(req, res) {
   return json(res, 404, { error: "not_found" });
 }
 
-async function start() { await fs.mkdir(WORKSPACE, { recursive: true }); await loadIdentity(); await restoreState(); const server = http.createServer((req, res) => route(req, res).catch(error => { record("gateway.error", { error: error instanceof Error ? error.message : "unknown" }); json(res, 500, { error: "internal_error", message: error instanceof Error ? error.message : "unknown" }); })); server.listen(PORT, HOST, () => { console.log(`ChDevAgent local gateway v${VERSION} listening at http://${HOST}:${PORT}`); console.log(`Workspace: ${WORKSPACE}`); console.log(`Pairing code: ${PAIRING_CODE}`); console.log(`LAN addresses: ${lanAddresses().join(', ') || 'Không phát hiện IPv4 LAN'}`); console.log("Vietnamese UI + safe local capabilities enabled."); }); }
+const RELAY_URL = String(process.env.CHDEVAGENT_RELAY_URL || '').replace(/\/$/, '');
+const RELAY_TOKEN = String(process.env.CHDEVAGENT_AGENT_TOKEN || '');
+let relayTimer = null;
+let relayBusy = false;
+
+async function relayCall(procedure, input, mutation = false) {
+  if (!RELAY_URL || !RELAY_TOKEN) return null;
+  const payload = JSON.stringify({ json: input });
+  const url = `${RELAY_URL}/api/trpc/relay.${procedure}`;
+  const response = mutation
+    ? await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload })
+    : await fetch(`${url}?input=${encodeURIComponent(payload)}`, { headers: { accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Relay HTTP ${response.status}`);
+  const body = await response.json();
+  return body?.result?.data?.json ?? body?.result?.data ?? null;
+}
+
+async function pollRelay() {
+  if (relayBusy || !RELAY_URL || !RELAY_TOKEN) return;
+  relayBusy = true;
+  try {
+    const result = await relayCall('agentPoll', { deviceId: DEVICE_ID, agentToken: RELAY_TOKEN });
+    for (const remote of result?.tasks || []) {
+      if ([...tasks.values()].some(task => task.relayTaskId === remote.id)) continue;
+      const task = {
+        id: id('relay_task'), relayTaskId: remote.id, createdAt: now(), updatedAt: now(), status: 'awaiting_approval',
+        instruction: String(remote.instruction || 'Yêu cầu từ relay'), source: 'https_relay', deviceId: 'relay',
+        requestedTools: ['file.list'], relativePath: '.', preview: {
+          action: 'Liệt kê tệp trong workspace cục bộ', scope: '/workspace', permission: 'chỉ đọc',
+          impact: 'Task relay đã được duyệt ở web nhưng vẫn yêu cầu xác nhận local; bản này chỉ cho phép đọc danh sách tệp.'
+        }, plan: []
+      };
+      task.plan = planFor(task); tasks.set(task.id, task);
+      record('relay.task.received', { taskId: task.id, relayTaskId: remote.id });
+    }
+    if ((result?.tasks || []).length) await persistState();
+  } catch (error) {
+    record('relay.poll_failed', { error: error instanceof Error ? error.message : 'unknown' });
+  } finally { relayBusy = false; }
+}
+
+function startRelayLoop() {
+  if (!RELAY_URL || !RELAY_TOKEN) { console.log('HTTPS relay: chưa cấu hình CHDEVAGENT_RELAY_URL/CHDEVAGENT_AGENT_TOKEN; chỉ chạy local.'); return; }
+  console.log(`HTTPS relay outbound: ${RELAY_URL}`);
+  void pollRelay();
+  relayTimer = setInterval(() => void pollRelay(), 5000);
+  relayTimer.unref?.();
+}
+
+async function start() { await fs.mkdir(WORKSPACE, { recursive: true }); await loadIdentity(); await restoreState(); const server = http.createServer((req, res) => route(req, res).catch(error => { record("gateway.error", { error: error instanceof Error ? error.message : "unknown" }); json(res, 500, { error: "internal_error", message: error instanceof Error ? error.message : "unknown" }); })); server.listen(PORT, HOST, () => { console.log(`ChDevAgent local gateway v${VERSION} listening at http://${HOST}:${PORT}`); console.log(`Workspace: ${WORKSPACE}`); console.log(`Pairing code: ${PAIRING_CODE}`); console.log(`LAN addresses: ${lanAddresses().join(', ') || 'Không phát hiện IPv4 LAN'}`); console.log("Vietnamese UI + safe local capabilities enabled."); startRelayLoop(); }); }
 start().catch(error => { console.error(error); process.exitCode = 1; });
