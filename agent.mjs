@@ -66,7 +66,8 @@ function planFor(task) { return [{ step: 1, title: "Kiểm tra quyền", status:
 
 async function executeTask(task) {
   if (task.cancelled) return;
-  task.status = "executing"; task.updatedAt = now(); activeControllers.set(task.id, new AbortController());
+    task.status = "executing"; task.updatedAt = now(); activeControllers.set(task.id, new AbortController());
+    if (task.relayTaskId) void relayCall('agentTaskStatus', { deviceId: DEVICE_ID, agentToken: RELAY_TOKEN, taskId: Number(task.relayTaskId), status: 'executing' }, true).catch(error => record('relay.status_failed', { taskId: task.id, error: error instanceof Error ? error.message : 'unknown' }));
   setActivity({ state: "running", currentStep: "Đang kiểm tra quyền", progress: 15, summary: `Đang xử lý: ${task.instruction}`, activeTaskId: task.id, log: [] }, "Đã nhận quyền từ thiết bị đã ghép nối");
   record("task.executing", { taskId: task.id, deviceId: task.deviceId });
   try {
@@ -78,9 +79,11 @@ async function executeTask(task) {
     else throw new Error("Công cụ chưa được bật trong registry");
     if (task.cancelled) return;
     task.status = "succeeded"; task.updatedAt = now(); setActivity({ state: "idle", currentStep: "Hoàn tất", progress: 100, summary: "Tác vụ đã hoàn tất", activeTaskId: null }, "Đã trả kết quả và ghi audit log"); record("task.succeeded", { taskId: task.id });
+    if (task.relayTaskId) void relayCall('agentTaskStatus', { deviceId: DEVICE_ID, agentToken: RELAY_TOKEN, taskId: Number(task.relayTaskId), status: 'succeeded', result: JSON.stringify(task.result || {}) }, true).catch(error => record('relay.status_failed', { taskId: task.id, error: error instanceof Error ? error.message : 'unknown' }));
   } catch (error) {
     if (task.cancelled) return;
-    task.status = "failed"; task.error = error instanceof Error ? error.message : "Tác vụ thất bại"; task.updatedAt = now(); setActivity({ state: "error", currentStep: "Có lỗi", progress: 100, summary: task.error, activeTaskId: null }, task.error); record("task.failed", { taskId: task.id, error: task.error });
+    task.status = "failed"; task.error = error instanceof Error ? error.message : "Tác vụ thất bại"; task.updatedAt = now(); setActivity({ state: "error", currentStep: "Có lỗi", progress: 100, summary: task.error, activeTaskId: null }, task.error); record("task.failed", { taskId: task.id, deviceId: task.deviceId, error: task.error });
+    if (task.relayTaskId) void relayCall('agentTaskStatus', { deviceId: DEVICE_ID, agentToken: RELAY_TOKEN, taskId: Number(task.relayTaskId), status: 'failed', result: task.error }, true).catch(error => record('relay.status_failed', { taskId: task.id, error: error instanceof Error ? error.message : 'unknown' }));
   } finally { activeControllers.delete(task.id); void persistState(); }
 }
 function createTask(body, device) {
