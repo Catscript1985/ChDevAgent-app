@@ -111,20 +111,22 @@ async function route(req, res) {
   const skillMatch = url.pathname.match(/^\/api\/skills\/([^/]+)\/(submit|approve|disable)$/); if (skillMatch && method === 'POST') { const skill = skills.get(skillMatch[1]); if (!skill || (skill.ownerDeviceId !== device.id && !device.local)) return json(res, 404, { error: 'skill_not_found' }); const action = skillMatch[2]; if (action === 'submit') skill.status = 'pending_review'; if (action === 'approve') { skill.status = 'enabled'; skill.approvedAt = now(); } if (action === 'disable') skill.status = 'disabled'; skill.updatedAt = now(); skill.history = [{ at: now(), action, detail: action === 'approve' ? 'Đã duyệt; chỉ có thể dùng trong capability đã cấp' : `Skill chuyển sang ${skill.status}` }, ...(skill.history || [])].slice(0, 30); record(`skill.${action}`, { skillId: skill.id, deviceId: device.id }); void persistState(); return json(res, 200, skillSummary(skill)); }
   if (method === "GET" && url.pathname === "/api/recent-files") return json(res, 200, { files: await recentFiles() });
   if (method === "GET" && url.pathname === "/api/devices") return json(res, 200, { devices: [...devices.values()].filter(d => !d.revoked).map(({ tokenHash: _, ...safe }) => safe) });
-  if (method === "GET" && url.pathname === "/api/history") return json(res, 200, { tasks: [...tasks.values()].filter(t => t.deviceId === device.id).map(taskSummary), events: audit.filter(event => !event.deviceId || event.deviceId === device.id).slice(0, 100) });
+  if (method === "GET" && url.pathname === "/api/history") return json(res, 200, { tasks: [...tasks.values()].filter(t => t.deviceId === device.id || (device.local && t.source === 'https_relay')).map(taskSummary), events: audit.filter(event => !event.deviceId || event.deviceId === device.id).slice(0, 100) });
   if (method === "GET" && url.pathname === "/api/audit") return json(res, 200, { events: audit.filter(event => !event.deviceId || event.deviceId === device.id) });
   if (method === "POST" && url.pathname === "/api/stop") { for (const task of tasks.values()) if (task.deviceId === device.id && ["awaiting_approval", "approved", "executing"].includes(task.status)) { task.cancelled = true; task.status = "cancelled"; task.updatedAt = now(); activeControllers.get(task.id)?.abort(); record("task.cancelled", { taskId: task.id, deviceId: device.id }); } setActivity({ state: "stopped", currentStep: "Đã dừng", progress: 0, summary: "Đã dừng theo yêu cầu người dùng", activeTaskId: null }, "Nút dừng khẩn cấp đã được kích hoạt"); return json(res, 200, { ok: true, activity: activitySummary() }); }
   if (method === "POST" && url.pathname === "/api/tasks") { try { const task = createTask(await readBody(req), device); return json(res, 201, { ...taskSummary(task), plan: task.plan }); } catch (error) { return json(res, 400, { error: error instanceof Error ? error.message : "invalid_task" }); } }
   const taskMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)(?:\/(approve|reject|cancel))?$/);
-  if (taskMatch) { const task = tasks.get(taskMatch[1]); if (!task || task.deviceId !== device.id) return json(res, 404, { error: "task_not_found" }); const action = taskMatch[2]; if (method === "GET" && !action) return json(res, 200, { ...taskSummary(task), plan: task.plan }); if (method === "POST" && action === "approve") { if (task.status !== "awaiting_approval") return json(res, 409, { error: "task_not_awaiting_approval" }); task.status = "approved"; task.updatedAt = now(); record("task.approved", { taskId: task.id, deviceId: device.id }); setTimeout(() => executeTask(task), 50); return json(res, 200, taskSummary(task)); } if (method === "POST" && action === "reject") { if (task.status !== "awaiting_approval") return json(res, 409, { error: "task_not_awaiting_approval" }); task.status = "rejected"; task.updatedAt = now(); setActivity({ state: "idle", currentStep: "Đã từ chối", progress: 0, summary: "Tác vụ không được thực thi", activeTaskId: null }, "Người dùng đã từ chối preview"); record("task.rejected", { taskId: task.id, deviceId: device.id }); return json(res, 200, taskSummary(task)); } if (method === "POST" && action === "cancel") { if (["succeeded", "failed", "rejected", "cancelled"].includes(task.status)) return json(res, 409, { error: "task_already_finished" }); task.cancelled = true; task.status = "cancelled"; task.updatedAt = now(); activeControllers.get(task.id)?.abort(); setActivity({ state: "stopped", currentStep: "Đã dừng", progress: 0, summary: "Tác vụ đã được dừng", activeTaskId: null }, "Người dùng đã dừng tác vụ"); record("task.cancelled", { taskId: task.id, deviceId: device.id }); return json(res, 200, taskSummary(task)); } }
-  if (method === "GET" && url.pathname === "/api/tasks") return json(res, 200, { tasks: [...tasks.values()].filter(task => task.deviceId === device.id).map(taskSummary) });
+  if (taskMatch) { const task = tasks.get(taskMatch[1]); const canManageRelayTask = device.local && task?.source === 'https_relay'; if (!task || (task.deviceId !== device.id && !canManageRelayTask)) return json(res, 404, { error: "task_not_found" }); const action = taskMatch[2]; if (method === "GET" && !action) return json(res, 200, { ...taskSummary(task), plan: task.plan }); if (method === "POST" && action === "approve") { if (task.status !== "awaiting_approval") return json(res, 409, { error: "task_not_awaiting_approval" }); task.status = "approved"; task.updatedAt = now(); record("task.approved", { taskId: task.id, deviceId: device.id }); setTimeout(() => executeTask(task), 50); return json(res, 200, taskSummary(task)); } if (method === "POST" && action === "reject") { if (task.status !== "awaiting_approval") return json(res, 409, { error: "task_not_awaiting_approval" }); task.status = "rejected"; task.updatedAt = now(); setActivity({ state: "idle", currentStep: "Đã từ chối", progress: 0, summary: "Tác vụ không được thực thi", activeTaskId: null }, "Người dùng đã từ chối preview"); record("task.rejected", { taskId: task.id, deviceId: device.id }); return json(res, 200, taskSummary(task)); } if (method === "POST" && action === "cancel") { if (["succeeded", "failed", "rejected", "cancelled"].includes(task.status)) return json(res, 409, { error: "task_already_finished" }); task.cancelled = true; task.status = "cancelled"; task.updatedAt = now(); activeControllers.get(task.id)?.abort(); setActivity({ state: "stopped", currentStep: "Đã dừng", progress: 0, summary: "Tác vụ đã được dừng", activeTaskId: null }, "Người dùng đã dừng tác vụ"); record("task.cancelled", { taskId: task.id, deviceId: device.id }); return json(res, 200, taskSummary(task)); } }
+  if (method === "GET" && url.pathname === "/api/tasks") return json(res, 200, { tasks: [...tasks.values()].filter(task => task.deviceId === device.id || (device.local && task.source === 'https_relay')).map(taskSummary) });
   return json(res, 404, { error: "not_found" });
 }
 
 const RELAY_URL = String(process.env.CHDEVAGENT_RELAY_URL || '').replace(/\/$/, '');
 const RELAY_TOKEN = String(process.env.CHDEVAGENT_AGENT_TOKEN || '');
 let relayTimer = null;
+let relayHeartbeatTimer = null;
 let relayBusy = false;
+let relayFailureCount = 0;
 
 async function relayCall(procedure, input, mutation = false) {
   if (!RELAY_URL || !RELAY_TOKEN) return null;
@@ -158,16 +160,32 @@ async function pollRelay() {
     }
     if ((result?.tasks || []).length) await persistState();
   } catch (error) {
-    record('relay.poll_failed', { error: error instanceof Error ? error.message : 'unknown' });
+    relayFailureCount += 1;
+    record('relay.poll_failed', { error: error instanceof Error ? error.message : 'unknown', retryInMs: Math.min(60000, 5000 * relayFailureCount) });
   } finally { relayBusy = false; }
+}
+
+async function heartbeatRelay() {
+  if (!RELAY_URL || !RELAY_TOKEN) return;
+  try {
+    await relayCall('agentHeartbeat', { deviceId: DEVICE_ID, agentToken: RELAY_TOKEN }, true);
+    relayFailureCount = 0;
+    record('relay.heartbeat', { deviceId: DEVICE_ID });
+  } catch (error) {
+    relayFailureCount += 1;
+    record('relay.heartbeat_failed', { error: error instanceof Error ? error.message : 'unknown' });
+  }
 }
 
 function startRelayLoop() {
   if (!RELAY_URL || !RELAY_TOKEN) { console.log('HTTPS relay: chưa cấu hình CHDEVAGENT_RELAY_URL/CHDEVAGENT_AGENT_TOKEN; chỉ chạy local.'); return; }
   console.log(`HTTPS relay outbound: ${RELAY_URL}`);
+  void heartbeatRelay();
   void pollRelay();
   relayTimer = setInterval(() => void pollRelay(), 5000);
+  relayHeartbeatTimer = setInterval(() => void heartbeatRelay(), 15000);
   relayTimer.unref?.();
+  relayHeartbeatTimer.unref?.();
 }
 
 async function start() { await fs.mkdir(WORKSPACE, { recursive: true }); await loadIdentity(); await restoreState(); const server = http.createServer((req, res) => route(req, res).catch(error => { record("gateway.error", { error: error instanceof Error ? error.message : "unknown" }); json(res, 500, { error: "internal_error", message: error instanceof Error ? error.message : "unknown" }); })); server.listen(PORT, HOST, () => { console.log(`ChDevAgent local gateway v${VERSION} listening at http://${HOST}:${PORT}`); console.log(`Workspace: ${WORKSPACE}`); console.log(`Pairing code: ${PAIRING_CODE}`); console.log(`LAN addresses: ${lanAddresses().join(', ') || 'Không phát hiện IPv4 LAN'}`); console.log("Vietnamese UI + safe local capabilities enabled."); startRelayLoop(); }); }
