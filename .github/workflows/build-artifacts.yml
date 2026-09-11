@@ -133,12 +133,12 @@ jobs:
       - name: Publish public release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.6.0-logo-skills
-          name: ChDevAgent v0.6.0 — Unified Logo & Skills
+          tag_name: v0.8.0-relay
+          name: ChDevAgent v0.8.0 — HTTPS Relay
           prerelease: true
           make_latest: false
           body: |
-            Bản ChDevAgent v0.6.0 dùng chung logo trên Android và Windows, giao diện Chatbot/Agent tiếng Việt tinh tế hơn, chat văn bản có lịch sử và Skill center. Skill có nguồn, hướng dẫn, trạng thái bản nháp/chờ duyệt/đã bật/tắt, không tự cấp quyền mới và vẫn tuân thủ deny-by-default.
+            Bản ChDevAgent v0.8.0 bổ sung HTTPS relay outbound không cần mở port, API key cá nhân có thể thu hồi/rotation, queue task theo PC device, heartbeat, audit event, idempotencyKey, relay-only tùy chọn và coding-plan preview bắt buộc phê duyệt. APK/EXE vẫn giữ fallback LAN để tương thích; cần kiểm thử thiết bị thật trước khi dùng production.
           files: |
             release-assets/android/app-release.apk
             release-assets/desktop/*.exe
