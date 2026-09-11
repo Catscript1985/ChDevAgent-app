@@ -35,3 +35,8 @@ Màn hình đã hỗ trợ pairing, tạo task read-only, xem preview, approve/r
 Có thể kết nối ngoài mạng Wi‑Fi bằng cách nhập **Relay HTTPS**, **API key cá nhân** và **PC device ID** trong màn hình thiết lập. API key được cấp từ website và có thể thu hồi; không nhập API Admin vào APK. PC Agent cần chạy với `CHDEVAGENT_RELAY_URL` trỏ tới URL website relay và `CHDEVAGENT_AGENT_TOKEN` là token enrollment riêng của PC.
 
 Nếu để trống Relay HTTPS, ứng dụng vẫn hỗ trợ đường LAN cũ bằng địa chỉ dạng `http://IP-máy-tính:8228`. Chế độ relay hiện gửi task qua API HTTPS, vẫn hiển thị preview và yêu cầu người dùng phê duyệt trước khi task được đưa vào queue.
+
+
+## Chế độ relay-only trên PC
+
+Khi quy trình web đã được kiểm thử đầy đủ, PC Agent có thể chạy với `CHDEVAGENT_RELAY_ONLY=1`. Ở chế độ này, task chỉ được thực thi sau khi relay đã ghi nhận thao tác phê duyệt từ người dùng trên web/điện thoại. Khi chưa bật biến này, PC Agent giữ local approval fallback để tương thích bản cũ.

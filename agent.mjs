@@ -123,6 +123,7 @@ async function route(req, res) {
 
 const RELAY_URL = String(process.env.CHDEVAGENT_RELAY_URL || '').replace(/\/$/, '');
 const RELAY_TOKEN = String(process.env.CHDEVAGENT_AGENT_TOKEN || '');
+const RELAY_ONLY = process.env.CHDEVAGENT_RELAY_ONLY === '1';
 let relayTimer = null;
 let relayHeartbeatTimer = null;
 let relayBusy = false;
@@ -148,7 +149,7 @@ async function pollRelay() {
     for (const remote of result?.tasks || []) {
       if ([...tasks.values()].some(task => task.relayTaskId === remote.id)) continue;
       const task = {
-        id: id('relay_task'), relayTaskId: remote.id, createdAt: now(), updatedAt: now(), status: 'awaiting_approval',
+        id: id('relay_task'), relayTaskId: remote.id, createdAt: now(), updatedAt: now(), status: RELAY_ONLY ? 'approved' : 'awaiting_approval',
         instruction: String(remote.instruction || 'Yêu cầu từ relay'), source: 'https_relay', deviceId: 'relay',
         requestedTools: ['file.list'], relativePath: '.', preview: {
           action: 'Liệt kê tệp trong workspace cục bộ', scope: '/workspace', permission: 'chỉ đọc',
@@ -156,7 +157,8 @@ async function pollRelay() {
         }, plan: []
       };
       task.plan = planFor(task); tasks.set(task.id, task);
-      record('relay.task.received', { taskId: task.id, relayTaskId: remote.id });
+      record('relay.task.received', { taskId: task.id, relayTaskId: remote.id, relayOnly: RELAY_ONLY });
+      if (RELAY_ONLY) setTimeout(() => void executeTask(task), 50);
     }
     if ((result?.tasks || []).length) await persistState();
   } catch (error) {
@@ -179,7 +181,7 @@ async function heartbeatRelay() {
 
 function startRelayLoop() {
   if (!RELAY_URL || !RELAY_TOKEN) { console.log('HTTPS relay: chưa cấu hình CHDEVAGENT_RELAY_URL/CHDEVAGENT_AGENT_TOKEN; chỉ chạy local.'); return; }
-  console.log(`HTTPS relay outbound: ${RELAY_URL}`);
+  console.log(`HTTPS relay outbound: ${RELAY_URL}${RELAY_ONLY ? ' (relay-only)' : ' (local approval fallback)'}`);
   void heartbeatRelay();
   void pollRelay();
   relayTimer = setInterval(() => void pollRelay(), 5000);
