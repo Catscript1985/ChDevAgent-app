@@ -54,3 +54,19 @@ Sau khi xem preview, gọi `POST /api/tasks/<task_id>/approve`, `/reject` hoặc
 ## Giới hạn bảo vệ
 
 PC Agent không chạy shell tùy ý, không tự mở ứng dụng, không gửi tin nhắn, không ghi/xóa file và không tự thực thi khi chưa có phê duyệt. Mọi đường dẫn được canonicalize và phải nằm trong workspace. File đọc bị giới hạn 1 MB. Pairing token được lưu state local để giữ lịch sử, nhưng bản này vẫn là development scaffold; trước khi mở rộng ra Internet cần HTTPS/TLS, rate limit, QR pairing có thu hồi, mã hóa state và kiểm toán bảo mật.
+
+
+## Kết nối HTTPS relay ngoài mạng LAN
+
+Bản v0.8 hỗ trợ PC Agent chủ động gọi relay qua HTTPS nên không cần mở port 8228 hoặc port forwarding. Sau khi tài khoản đã tạo device token riêng, đặt các biến môi trường trước khi chạy Agent:
+
+```bat
+set CHDEVAGENT_RELAY_URL=https://ten-relay-cua-ban.example.com
+set CHDEVAGENT_AGENT_TOKEN=cda_token_rieng_cua_device
+set CHDEVAGENT_RELAY_ONLY=0
+Start-ChDevAgent.bat
+```
+
+`CHDEVAGENT_AGENT_TOKEN` chỉ dùng cho đúng PC device, không dùng API Admin và không ghi vào mã nguồn. PC Agent gửi heartbeat, kéo task đã được phê duyệt, cập nhật trạng thái và tự retry với exponential backoff khi mạng tạm thời mất. Có thể đặt `CHDEVAGENT_RELAY_ONLY=1` sau khi đã kiểm thử đầy đủ; khi đó task relay được web/điện thoại phê duyệt mới được chạy, còn mặc định vẫn giữ local approval fallback để tương thích bản cũ.
+
+Không đưa token vào ảnh chụp màn hình, log công khai hoặc GitHub. Khi nghi ngờ lộ token, thu hồi device/API key trên relay và cấp token mới.
