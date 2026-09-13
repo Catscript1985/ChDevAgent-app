@@ -126,6 +126,7 @@ const RELAY_TOKEN = String(process.env.CHDEVAGENT_AGENT_TOKEN || '');
 const RELAY_ONLY = process.env.CHDEVAGENT_RELAY_ONLY === '1';
 let relayTimer = null;
 let relayHeartbeatTimer = null;
+let relayPollTimer = null;
 let relayBusy = false;
 let relayFailureCount = 0;
 
@@ -146,6 +147,7 @@ async function pollRelay() {
   relayBusy = true;
   try {
     const result = await relayCall('agentPoll', { deviceId: DEVICE_ID, agentToken: RELAY_TOKEN });
+    relayFailureCount = 0;
     for (const remote of result?.tasks || []) {
       if ([...tasks.values()].some(task => task.relayTaskId === remote.id)) continue;
       const task = {
@@ -164,7 +166,17 @@ async function pollRelay() {
   } catch (error) {
     relayFailureCount += 1;
     record('relay.poll_failed', { error: error instanceof Error ? error.message : 'unknown', retryInMs: Math.min(60000, 5000 * relayFailureCount) });
-  } finally { relayBusy = false; }
+  } finally {
+    relayBusy = false;
+    scheduleRelayPoll(relayFailureCount ? Math.min(60000, 5000 * (2 ** Math.min(relayFailureCount, 4))) : 5000);
+  }
+}
+
+function scheduleRelayPoll(delayMs) {
+  if (!RELAY_URL || !RELAY_TOKEN) return;
+  if (relayPollTimer) clearTimeout(relayPollTimer);
+  relayPollTimer = setTimeout(() => void pollRelay(), delayMs);
+  relayPollTimer.unref?.();
 }
 
 async function heartbeatRelay() {
@@ -183,10 +195,8 @@ function startRelayLoop() {
   if (!RELAY_URL || !RELAY_TOKEN) { console.log('HTTPS relay: chưa cấu hình CHDEVAGENT_RELAY_URL/CHDEVAGENT_AGENT_TOKEN; chỉ chạy local.'); return; }
   console.log(`HTTPS relay outbound: ${RELAY_URL}${RELAY_ONLY ? ' (relay-only)' : ' (local approval fallback)'}`);
   void heartbeatRelay();
-  void pollRelay();
-  relayTimer = setInterval(() => void pollRelay(), 5000);
+  scheduleRelayPoll(0);
   relayHeartbeatTimer = setInterval(() => void heartbeatRelay(), 15000);
-  relayTimer.unref?.();
   relayHeartbeatTimer.unref?.();
 }
 
