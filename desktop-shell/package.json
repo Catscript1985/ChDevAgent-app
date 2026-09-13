@@ -1,6 +1,6 @@
 {
   "name": "chdevagent-desktop",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "private": true,
   "description": "ChDevAgent Windows standalone desktop app",
   "main": "main.cjs",
